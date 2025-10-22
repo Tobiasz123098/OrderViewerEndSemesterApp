@@ -1,12 +1,10 @@
 package com.example.domartorders;
 
 import android.content.Context;
-import android.util.Log;
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Filter;
-import android.widget.Filterable;
 import android.widget.ImageButton;
 import android.widget.TextView;
 
@@ -22,203 +20,91 @@ import com.google.firebase.database.FirebaseDatabase;
 
 import org.jetbrains.annotations.NotNull;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Collection;
+import java.util.Date;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Locale;
 
-public class OrdersAdapter extends RecyclerView.Adapter<OrdersAdapter.ViewHolder> implements Filterable {
+public class OrdersAdapter extends RecyclerView.Adapter<OrdersAdapter.ViewHolder> {
 
-    private static final String TAG = OrdersAdapter.class.getSimpleName();
+    private final List<Order> data;
+    private final Context context;
 
-    private List<Order> infoList;
-    private List<Order> infoListAll;
-    private Context context;
-
-    public OrdersAdapter(List<Order> infoList, Context context) {
-        this.infoList = infoList;
+    public OrdersAdapter(List<Order> data, Context context) {
+        this.data = data;
         this.context = context;
-        infoListAll = new ArrayList<>();
-        infoListAll.addAll(infoList);
+        setHasStableIds(false);
     }
 
     @NonNull
     @NotNull
     @Override
     public ViewHolder onCreateViewHolder(@NonNull @NotNull ViewGroup parent, int viewType) {
-        Log.d(TAG, "onCreateViewHolder: ");
-
-        LayoutInflater layoutInflater = LayoutInflater.from(parent.getContext());
-        View view = layoutInflater.inflate(R.layout.orders_adapter, parent, false);
+        View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.orders_adapter, parent, false);
         return new ViewHolder(view);
     }
 
-
     @Override
     public void onBindViewHolder(@NonNull @NotNull OrdersAdapter.ViewHolder holder, final int position) {
-        Log.d(TAG, "onBindViewHolder: ");
-        Order order = infoList.get(position);
+        Order order = data.get(position);
+        String nr = safe(order.getNr());
+        String displayNr = !nr.isEmpty() ? nr : String.valueOf(order.getId());
 
-        RecyclerView.LayoutManager layoutManager = new LinearLayoutManager(context, RecyclerView.VERTICAL, false);
-        holder.child_rv.setLayoutManager(layoutManager);
+        holder.orderNumberTextView.setText("Zamówienie nr " + (displayNr.isEmpty() ? "----" : displayNr));
 
+        holder.titleTextView.setText("");
+        holder.titleTextView.setVisibility(View.GONE);
+
+        holder.orderNumberTextView.setSingleLine(true);
+        holder.orderNumberTextView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+
+
+        String statusPl = mapStatusToPl(order.getStatus());
+        holder.statusTextView.setText(statusPl);
+
+        String rodzajPl = mapDeliveryToPl(order.getRodzaj_dost());
+        holder.rodzajDostawyTextView.setText(rodzajPl);
+
+        holder.formaZaplatyTextView.setText(isEmpty(order.getForma_zap()) ? "brak" : order.getForma_zap());
+
+        holder.adresDostawyTextView.setText(isEmpty(order.getAdres_dostawy()) ? "----" : order.getAdres_dostawy());
+        holder.cenaBruttoTextView.setText(order.getCena_brutto() == 0 ? "----" : String.valueOf(order.getCena_brutto()));
+        holder.walutaTextView.setText(isEmpty(order.getWaluta()) ? "----" : order.getWaluta());
+        holder.odbiorcaTextView.setText(isEmpty(order.getOdbiorca()) ? "brak" : order.getOdbiorca());
+
+        String dataZmiana = formatDateOrEmpty(order.getData_zmiana());
+        holder.dataZmianaTextView.setText(dataZmiana.isEmpty() ? "brak" : dataZmiana);
+
+        holder.child_rv.setLayoutManager(new LinearLayoutManager(context, RecyclerView.VERTICAL, false));
         loadOrderDetails(order.getId(), holder);
 
-        holder.imageButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                YoYo.with(Techniques.RotateIn)
-                        .duration(200)
-                        .repeat(0)
-                        .playOn(holder.imageButton);
-
-                order.setExpanded(!order.isExpanded());
-                notifyItemChanged(position);
-            }
+        holder.imageButton.setOnClickListener(v -> {
+            YoYo.with(Techniques.RotateIn).duration(200).repeat(0).playOn(holder.imageButton);
+            order.setExpanded(!order.isExpanded());
+            notifyItemChanged(position);
+        });
+        holder.orderNumberTextView.setOnClickListener(v -> {
+            order.setExpanded(!order.isExpanded());
+            notifyItemChanged(position);
         });
 
-        holder.orderNumberTextView.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                order.setExpanded(!order.isExpanded());
-                notifyItemChanged(position);
-            }
-        });
-
-        //tłumaczenie do statusu
-        holder.statusTextView.setText(order.getStatus());
-
-        if (holder.statusTextView.getText().equals("READY") | holder.statusTextView.getText().equals("IN_STOCK")) {
-            holder.statusTextView.setText("Gotowe");
-        } else if (holder.statusTextView.getText().equals("PARTIALLY_SENT")) {
-            holder.statusTextView.setText("Częściowo wyjechało");
-        } else if (holder.statusTextView.getText().equals("SENT")) {
-            holder.statusTextView.setText("Wyjechało");
-        } else if (holder.statusTextView.getText().equals("IN_PROGRESS") | holder.statusTextView.getText().equals("MODIFIED") | holder.statusTextView.getText().equals("DURING_THE_WITHDRAWAL") | holder.statusTextView.getText().equals("PLACED")) {
-            holder.statusTextView.setText("W trakcie realizacji");
-        } else if (holder.statusTextView.getText().equals("WITHDRAWN")) {
-            holder.statusTextView.setText("Zakończone");
-        } else {
-            holder.statusTextView.setText(order.getStatus());
-        }
-
-        //tłumaczenie do radzaju dostawy
-        holder.rodzajDostawyTextView.setText(order.getRodzaj_dost());
-
-        if (holder.rodzajDostawyTextView.getText().equals("COURIER")) {
-            holder.rodzajDostawyTextView.setText("Wysyłka kurierem");
-        } else if (holder.rodzajDostawyTextView.getText().equals("COURIER_DOMARTSTYL")) {
-            holder.rodzajDostawyTextView.setText("Transport DomArtStyl");
-        } else if (holder.rodzajDostawyTextView.getText().equals("COLLECT_IN_PERSON")) {
-            holder.rodzajDostawyTextView.setText("Odbiór osobisty");
-        } else if (holder.rodzajDostawyTextView.getText().equals("CUSTOMER_COURIER")) {
-            holder.rodzajDostawyTextView.setText("Odbiór kurierem");
-        } else if (holder.rodzajDostawyTextView.getText().equals("TO_BE_DETERMINED")) {
-            holder.rodzajDostawyTextView.setText("Do ustalenia");
-        } else {
-            holder.rodzajDostawyTextView.setText(order.getRodzaj_dost());
-        }
-
-        //wyświetlanie "brak" przy formie zapłaty
-        holder.formaZaplatyTextView.setText(order.getForma_zap());
-
-        if (holder.formaZaplatyTextView.getText().equals("")) {
-            holder.formaZaplatyTextView.setText("brak");
-        } else {
-            holder.formaZaplatyTextView.setText(order.getForma_zap());
-        }
-
-
-//napisać do tego klasę zamiast wypisywać tyle if-ów
-        if (holder.titleTextView.getText().equals("")) {
-            holder.titleTextView.setText("----");
-        } else {
-            holder.titleTextView.setText(order.getNr());
-        }
-        if (holder.adresDostawyTextView.getText().equals("")) {
-            holder.adresDostawyTextView.setText("----");
-        } else {
-            holder.adresDostawyTextView.setText(order.getAdres_dostawy());
-        }
-        if (holder.cenaBruttoTextView.getText().equals("")) {
-            holder.cenaBruttoTextView.setText("----");
-        } else {
-            holder.cenaBruttoTextView.setText(String.valueOf(order.getCena_brutto()));
-        }
-        if (holder.dataZmianaTextView.getText().length() == 0) {
-            holder.dataZmianaTextView.setText("brak");
-        } else {
-            holder.dataZmianaTextView.setText(order.getData_zmiana());
-        }
-        if (holder.odbiorcaTextView.getText().length() == 0) {
-            holder.odbiorcaTextView.setText("brak");
-        } else {
-            holder.odbiorcaTextView.setText(order.getOdbiorca());
-        }
-//        if (holder.terminZaplatyTextView.getText().equals("")) {
-//            holder.terminZaplatyTextView.setText("----");
-//        } else {
-//            holder.terminZaplatyTextView.setText(String.valueOf(information.getTermin_zap()));
-//        }
-        if (holder.walutaTextView.getText().equals("")) {
-            holder.walutaTextView.setText("----");
-        } else {
-            holder.walutaTextView.setText(order.getWaluta());
-        }
-
-        boolean isExpanded = infoList.get(position).isExpanded();
+        boolean isExpanded = order.isExpanded();
         holder.expandableLayout.setVisibility(isExpanded ? View.VISIBLE : View.GONE);
-
     }
 
     @Override
     public int getItemCount() {
-        Log.d(TAG, "getItemCount: " + infoList.size());
-        return infoList.size();
+        return data.size();
     }
 
-
-    @Override
-    public Filter getFilter() {
-        return filter;
+    public void setData(List<Order> newData) {
+        data.clear();
+        data.addAll(newData);
+        notifyDataSetChanged();
     }
 
-
-    Filter filter = new Filter() {
-        //run on background thread
-        @Override
-        protected FilterResults performFiltering(CharSequence charSequence) {
-
-            FilterResults filterResults = new FilterResults();
-            //charSequence.toString().isEmpty()
-            if (charSequence == null || charSequence.length() == 0) {
-                filterResults.values = infoListAll;
-            } else {
-                String search = charSequence.toString().toLowerCase().trim();
-                filterResults.values = infoListAll.stream()
-                        .filter(item -> (item.getNr() != null && item.getNr().toLowerCase().contains(search))
-                                || (item.getStatus() != null && StatusEnum.getRelatedStatuses(search).contains(item.getStatus())))
-                        .collect(Collectors.toList());
-            }
-            return filterResults;
-        }
-
-        //run on UI thread
-        @Override
-        protected void publishResults(CharSequence charSequence, FilterResults filterResults) {
-            infoList.clear();
-            infoList.addAll((Collection<? extends Order>) filterResults.values);
-            notifyDataSetChanged();
-        }
-    };
-
-    @Override
-    public long getItemId(int position) {
-        return position;
-    }
-
-    class ViewHolder extends RecyclerView.ViewHolder {
-
+    static class ViewHolder extends RecyclerView.ViewHolder {
         ConstraintLayout expandableLayout;
         ImageButton imageButton;
         TextView titleTextView, adresDostawyTextView, cenaBruttoTextView, dataZmianaTextView, formaZaplatyTextView,
@@ -227,44 +113,123 @@ public class OrdersAdapter extends RecyclerView.Adapter<OrdersAdapter.ViewHolder
 
         public ViewHolder(@NonNull @NotNull View itemView) {
             super(itemView);
-            Log.d(TAG, "ViewHolder: ");
-            orderNumberTextView = itemView.findViewById(R.id.orderNumberTextView);
-            expandableLayout = itemView.findViewById(R.id.expandableLayout);
-            titleTextView = itemView.findViewById(R.id.textView1);
-            adresDostawyTextView = itemView.findViewById(R.id.adresTextView);
-            cenaBruttoTextView = itemView.findViewById(R.id.plotTextView);
-            dataZmianaTextView = itemView.findViewById(R.id.data_przyjecia_zamowienia);
-            formaZaplatyTextView = itemView.findViewById(R.id.formaZaplatyTextView_validate);
-            odbiorcaTextView = itemView.findViewById(R.id.zamawiajacy);
+            orderNumberTextView   = itemView.findViewById(R.id.orderNumberTextView);
+            expandableLayout      = itemView.findViewById(R.id.expandableLayout);
+            titleTextView         = itemView.findViewById(R.id.textView1);
+            adresDostawyTextView  = itemView.findViewById(R.id.adresTextView);
+            cenaBruttoTextView    = itemView.findViewById(R.id.plotTextView);
+            dataZmianaTextView    = itemView.findViewById(R.id.data_przyjecia_zamowienia);
+            formaZaplatyTextView  = itemView.findViewById(R.id.formaZaplatyTextView_validate);
+            odbiorcaTextView      = itemView.findViewById(R.id.zamawiajacy);
             rodzajDostawyTextView = itemView.findViewById(R.id.rodzajDostawyText_validate);
-            statusTextView = itemView.findViewById(R.id.textView25);
-            walutaTextView = itemView.findViewById(R.id.walutaTextView_validate);
-            child_rv = itemView.findViewById(R.id.child_rv);
-
-            imageButton = itemView.findViewById(R.id.imageButton);
-
+            statusTextView        = itemView.findViewById(R.id.textView25);
+            walutaTextView        = itemView.findViewById(R.id.walutaTextView_validate);
+            child_rv              = itemView.findViewById(R.id.child_rv);
+            imageButton           = itemView.findViewById(R.id.imageButton);
         }
     }
+
+
+    private static String safe(String s) {
+        return s == null ? "" : s.trim();
+    }
+
+    private static boolean isEmpty(String s) {
+        return TextUtils.isEmpty(s) || s.trim().isEmpty();
+    }
+
+    private static String formatDateOrEmpty(long millis) {
+        if (millis <= 0) return "";
+        try {
+            return new SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(new Date(millis));
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private static String mapStatusToPl(String status) {
+        String s = safe(status).toUpperCase(Locale.ROOT);
+        switch (s) {
+            case "READY":
+            case "IN_STOCK":
+                return "Gotowe";
+            case "PARTIALLY_SENT":
+            case "PARTIAL_SENT":
+            case "PARTIAL":
+                return "Częściowo wyjechało";
+            case "SENT":
+                return "Wyjechało";
+            case "IN_PROGRESS":
+            case "MODIFIED":
+            case "DURING_THE_WITHDRAWAL":
+            case "PLACED":
+            case "STARTED":
+                return "W trakcie realizacji";
+            case "WITHDRAWN":
+            case "DONE":
+                return "Zakończone";
+            default:
+                return s.isEmpty() ? "—" : s; // pokaż oryginalny kod, jeśli nieznany
+        }
+    }
+
+    private static String mapDeliveryToPl(String rodzaj) {
+        String r = safe(rodzaj).toUpperCase(Locale.ROOT);
+        switch (r) {
+            case "COURIER":              return "Wysyłka kurierem";
+            case "COURIER_DOMARTSTYL":   return "Transport DomArtStyl";
+            case "COLLECT_IN_PERSON":    return "Odbiór osobisty";
+            case "CUSTOMER_COURIER":     return "Odbiór kurierem";
+            case "TO_BE_DETERMINED":     return "Do ustalenia";
+            default:                     return isEmpty(rodzaj) ? "—" : rodzaj;
+        }
+    }
+
 
     private void loadOrderDetails(long orderId, ViewHolder holder) {
         List<OrderActivity> orderActivityList = new ArrayList<>();
         List<PositionActivityMerge> mergedList = new ArrayList<>();
-        FirebaseDatabase.getInstance().getReference().child("czynnosci").child(String.valueOf(orderId)).get().addOnCompleteListener(task -> {
-            for (DataSnapshot itemSnapshot : task.getResult().getChildren()) {
-                orderActivityList.add(itemSnapshot.getValue(OrderActivity.class));
-            }
-        });
-        FirebaseDatabase.getInstance().getReference().child("poz_zlec").child(String.valueOf(orderId)).get().addOnCompleteListener(task -> {
-            for (DataSnapshot itemSnapshot : task.getResult().getChildren()) {
-                OrderPosition orderPosition = itemSnapshot.getValue(OrderPosition.class);
-                mergedList.add(new PositionActivityMerge(itemSnapshot.getValue(OrderPosition.class), findActivity(orderPosition.getZlec_id(), orderActivityList)));
-            }
-            holder.child_rv.setAdapter(new OrdersChildAdapter(mergedList, holder.child_rv.getContext()));
-        });
+        holder.child_rv.setAdapter(new OrdersChildAdapter(mergedList, holder.child_rv.getContext()));
+
+        FirebaseDatabase.getInstance().getReference()
+                .child("czynnosci")
+                .child(String.valueOf(orderId))
+                .get()
+                .addOnSuccessListener(taskSnap -> {
+                    if (taskSnap != null && taskSnap.exists()) {
+                        for (DataSnapshot itemSnapshot : taskSnap.getChildren()) {
+                            OrderActivity act = itemSnapshot.getValue(OrderActivity.class);
+                            if (act != null) orderActivityList.add(act);
+                        }
+                    }
+
+                    FirebaseDatabase.getInstance().getReference()
+                            .child("poz_zlec")
+                            .child(String.valueOf(orderId))
+                            .get()
+                            .addOnSuccessListener(posSnap -> {
+                                mergedList.clear();
+                                if (posSnap != null && posSnap.exists()) {
+                                    for (DataSnapshot itemSnapshot : posSnap.getChildren()) {
+                                        OrderPosition orderPosition = itemSnapshot.getValue(OrderPosition.class);
+                                        if (orderPosition != null) {
+                                            mergedList.add(new PositionActivityMerge(
+                                                    orderPosition,
+                                                    findActivityFor(orderPosition.getZlec_id(), orderActivityList)
+                                            ));
+                                        }
+                                    }
+                                }
+                                holder.child_rv.setAdapter(new OrdersChildAdapter(mergedList, holder.child_rv.getContext()));
+                            });
+                });
     }
 
-    private OrderActivity findActivity(long positionId, List<OrderActivity> orderActivities) {
-        return orderActivities.stream().filter(orderActivity -> orderActivity.getZlec_id() == positionId).findFirst().orElse(null);
+    private OrderActivity findActivityFor(long positionId, List<OrderActivity> orderActivities) {
+        for (OrderActivity a : orderActivities) {
+            if (a != null && a.getZlec_id() == positionId) return a;
+        }
+        return null;
     }
 }
 
