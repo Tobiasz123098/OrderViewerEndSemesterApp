@@ -9,6 +9,16 @@
     <string name="rejestracja_text">zarejestruj się.</string>
     <string name="numer_zamowienia">Zamówienie nr</string>
 
+    <string name="gallery_title">Galeria zdjęć</string>
+    <string name="gallery_item_logo">Logotyp</string>
+    <string name="gallery_item_clients">Klienci</string>
+    <string name="gallery_item_offers">Oferty</string>
+    <string name="gallery_item_deliveries">Dostawy</string>
+    <string name="gallery_item_transport">Transport</string>
+    <string name="gallery_item_presentations">Prezentacje</string>
+    <string name="gallery_item_statuses">Statusy</string>
+    <string name="gallery_item_orders">Zamówienia</string>
+
     <string name="all">Wszystkie</string>
     <string name="completed">Zakończone</string>
     <string name="in_process">W trakcie realizacji</string>

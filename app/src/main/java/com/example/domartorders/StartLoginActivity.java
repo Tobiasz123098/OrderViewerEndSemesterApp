@@ -55,7 +55,7 @@ public class StartLoginActivity extends Activity {
                     public void onComplete(@NonNull Task<AuthResult> task) {
                         if (task.isSuccessful()) {
                             Log.d(TAG, "onComplete success: ");
-                            startActivity(new Intent(StartLoginActivity.this, MainActivity.class));
+                            startActivity(new Intent(StartLoginActivity.this, GalleryActivity.class));
                             StartLoginActivity.this.finish();
                         } else {
                             Toast.makeText(StartLoginActivity.this, task.getException().getLocalizedMessage(), Toast.LENGTH_LONG).show();

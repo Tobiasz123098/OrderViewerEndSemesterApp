@@ -23,6 +23,9 @@
             android:name="com.example.domartorders.RegistrationActivity"
             android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
         <activity
+            android:name="com.example.domartorders.GalleryActivity"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
+        <activity
             android:name="com.example.domartorders.MainActivity"
             android:theme="@style/Theme.AppCompat.Light.NoActionBar"/>
     </application>
